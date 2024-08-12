@@ -27,11 +27,11 @@ import com.datasophon.worker.handler.ServiceHandler;
 import java.util.ArrayList;
 
 public class ZKFCHandlerStrategy extends AbstractHandlerStrategy implements ServiceRoleStrategy {
-
+    
     public ZKFCHandlerStrategy(String serviceName, String serviceRoleName) {
         super(serviceName, serviceRoleName);
     }
-
+    
     @Override
     public ExecResult handler(ServiceRoleOperateCommand command) {
         ExecResult startResult = new ExecResult();
@@ -39,11 +39,13 @@ public class ZKFCHandlerStrategy extends AbstractHandlerStrategy implements Serv
         String workPath = Constants.INSTALL_PATH + Constants.SLASH + command.getDecompressPackageName();
         if (!command.isSlave() && command.getCommandType().equals(CommandType.INSTALL_SERVICE)) {
             logger.info("start to execute hdfs zkfc -formatZK");
-
+            
             ArrayList<String> commands = new ArrayList<>();
             commands.add(workPath + "/bin/hdfs");
             commands.add("zkfc");
             commands.add("-formatZK");
+            commands.add("-nonInteractive");
+            commands.add("-force");
             ExecResult execResult = ShellUtils.execWithStatus(workPath, commands, 300L, logger);
             if (execResult.getExecResult()) {
                 logger.info("zkfc format success");
