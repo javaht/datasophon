@@ -1,29 +1,213 @@
-# Datasophon1.2.1集成Dinky1.0.1
+# Datasophon1.2.1集成Dinky1.1.0
 
-Dinky 下载地址: https://github.com/DataLinkDC/dinky/releases/tag/v1.0.1
+Dinky 下载地址: https://github.com/DataLinkDC/dinky/releases
+## 前置要求
 
-## 1.下载Dinky
+- Datasophon 1.2.1
+- Dinky 1.1.0
+
+## 1.下载Dinky并准备环境
 
 ```
 这里以Flink1.16版本为例
-wget https://github.com/DataLinkDC/dinky/releases/download/v1.0.1/dinky-release-1.16-1.0.1.tar.gz
+wget https://github.com/DataLinkDC/dinky/releases/download/v1.1.0/dinky-release-1.16-1.1.0.tar.gz
+tar -xzvf  dinky-release-1.16-1.1.0.tar.gz
 
-mv dinky-release-1.16-1.0.1.tar.gz  /opt/datasophon/DDP/packages
-cd /opt/datasophon/DDP/packages
+复制mysql驱动包mysql-connector-java-8.0.28.jar到dinky-release-1.16-1.1.0的lib目录下
+cp  mysql-connector-java-8.0.28.jar  dinky-release-1.16-1.1.0/lib
 
-md5sum dinky-release-1.16-1.0.1.tar.gz
-56b6d1fdd2c356b4f794ef1a9e514898 dinky-release-1.16-1.0.1.tar.gz
+复制出dinky数据库的sql文件,之后会用到
+cp dinky-release-1.16-1.1.0/sql/dinky-mysql.sql  ./
 
-echo 56b6d1fdd2c356b4f794ef1a9e514898 > dinky-release-1.16-1.0.1.tar.gz.md5
+重新打包
+tar -czvf dinky-release-1.16-1.1.0.tar.gz  dinky-release-1.16-1.1.0/
+
+mv dinky-release-1.16-1.1.0.tar.gz  /opt/datasophon/DDP/packages 
+cd /opt/datasophon/DDP/packages 
+ 
+md5sum dinky-release-1.16-1.1.0.tar.gz  | awk '{print $1}' >dinky-release-1.16-1.1.0.tar.gz.md5
 ```
 
 ## 2.准备服务配置模板
 
 在每个节点的datasophon-worker配置目录下添加配置模板
-
 ```
 cd  /opt/datasophon/datasophon-worker/conf/templates
-vim dinky.ftl
+1. vim  dinky-application.ftl 
+
+#################################################################################################################
+################################################# Common Config #################################################
+#################################################################################################################
+# Dinky application port
+server:
+  port: 8888
+  shutdown: graceful
+
+spring:
+  # Dinky application name
+  application:
+    name: Dinky
+  profiles:
+    # The h2 database is used by default. If you need to use other databases, please set the configuration active to: mysql, currently supports [mysql, pgsql, h2]
+    # If you use mysql database, please configure mysql database connection information in application-mysql.yml
+    # If you use pgsql database, please configure pgsql database connection information in application-pgsql.yml
+    # If you use the h2 database, please configure the h2 database connection information in application-h2.yml,
+    # note: the h2 database is only for experience use, and the related data that has been created cannot be migrated, please use it with caution
+    # 注意这里修改为db_activate参数
+    active: ${db_activate} #[h2,mysql,pgsql]
+    include:
+      - jmx
+      - flyway
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+  # mvc config
+  mvc:
+    pathmatch:
+      # Path matching strategy, default ant_path_matcher, support ant_path_matcher and path_pattern_parser
+      matching-strategy: ant_path_matcher
+    format:
+      date: yyyy-MM-dd HH:mm:ss # date format
+      time: HH:mm:ss # time format
+      date-time: yyyy-MM-dd HH:mm:ss # date-time format
+
+  # json format global configuration
+  jackson:
+    time-zone: GMT+8 # Time zone, default is GMT+8
+    date-format: yyyy-MM-dd HH:mm:ss # Date format, the default is yyyy-MM-dd HH:mm:ss
+
+  # circular references allowed
+  main:
+    allow-circular-references: true
+
+  # file upload config of servlet, the default is 500MB
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 524288000
+      max-request-size: 524288000
+
+  #  1. By default, memory cache metadata information is used,
+  #  2. DINKY supports Redis caching. If necessary, please change simple to Redis and open the Redis connection configuration below
+  #  3. Sub configuration items can be opened or customized as needed
+  cache:
+    type: simple
+    # If the type is configured as Redis, this item can be configured as needed
+#    redis:
+      # Do you want to cache empty values? Just save by default
+#      cache-null-values: false
+      # Cache expiration time, 24 hours
+#      time-to-live: 86400
+
+  ########################################################## Redis配置 ##########################################################
+  # Note: Redis related configurations in DINKY can be used to cache meta-data information (memory caching is used by default) and cache session information of SA TOKEN (dependency needs to be added,please refer to the official documentation of SA TOKEN for Redis caching configuration instructions)
+  ## 1. If you need to use Redis to cache metadata information, please configure cache. Type to Redis and then configure the following configuration items
+  ## 2. If you need to use Redis to cache SA Token session information, please follow the instructions in the official SA Token documentation to configure it
+  # Note: Please pay attention to the indentation after opening comments, otherwise it may cause configuration file parsing errors. Note that when both 1 and 2 are used simultaneously, only the same Redis database can be supported
+#  redis:
+#    host: localhost
+#    port: 6379
+#    username:
+#    password:
+    # Redis database number
+#    database: 10
+#    jedis:
+#      pool:
+        # The maximum number of connections in the connection pool (use a negative value to indicate no limit)
+#        max-active: 50
+        # The maximum blocking waiting time of the connection pool (use a negative value to indicate no limit)
+#        max-wait: 3000
+        # The maximum number of idle connections in the connection pool
+#        max-idle: 20
+        # The minimum number of idle connections in the connection pool
+#        min-idle: 5
+    # Connection timeout (milliseconds)
+#    timeout: 5000
+
+---
+
+#################################################################################################################
+################################################# Mybatis Config ################################################
+######### Please note: that the following configurations are not recommended to be modified #####################
+#################################################################################################################
+mybatis-plus:
+  mapper-locations: classpath:/mapper/*Mapper.xml
+  # Entity scanning, multiple packages are separated by commas or semicolons
+  typeAliasesPackage: org.dinky.model
+  global-config:
+    db-config:
+      id-type: auto
+      # Logic delete configuration : 0: false(Not deleted), 1: true(deleted)
+      logic-delete-field: is_delete
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+    banner: false
+  configuration:
+    ##### mybatis-plus prints complete sql (only for development environment)
+    #log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+  type-handlers-package: org.dinky.data.typehandler
+
+---
+#################################################################################################################
+################################################# SMS Config ####################################################
+#################################################################################################################
+sms:
+  is-print: false
+
+
+---
+#################################################################################################################
+################################################# Sa-Token Config ###############################################
+#################################################################################################################
+# Sa-Token basic configuration
+sa-token:
+  # The validity period of the token, the unit is 10 hours by default, -1 means it will never expire
+  timeout: 36000
+  # The temporary validity period of the token (the token will be considered as expired if there is no operation within the specified time)
+  # unit: second , if you do not need to set a temporary token, you can set it to -1
+  active-timeout: -1
+  # Whether to allow the same account to log in concurrently (when true, allow login together, when false, new login squeezes out old login)
+  is-concurrent: false
+  # When multiple people log in to the same account, whether to share a token (if true, all logins share a token, and if false, create a new token for each login)
+  is-share: true
+  # token style
+  token-style: uuid
+  # Whether to output the operation log
+  is-log: false
+  # Whether to print banner
+  is-print: false
+  # The secret key
+  jwt-secret-key: 0DA4198858E84F1AADDF846340587A85
+  # is write header
+  is-write-header: true
+  # is read header
+  is-read-header: true
+  token-name: token
+  is-read-cookie: true
+
+---
+#################################################################################################################
+################################################# knife4j Config ################################################
+#################################################################################################################
+knife4j:
+  enable: true
+  setting:
+    language: en
+
+
+---
+#################################################################################################################
+################################################# Crypto Config #################################################
+#################################################################################################################
+crypto:
+  enabled: false
+  encryption-password:
+
+
+
+2.vim dinky-application-mysql.ftl
+  若配置其他数据源,新建对应的ftl文件,将相应的application-xx.yml文件内容写入,并修改service_ddl.json的配置即可
 
 spring:
   datasource:
@@ -31,24 +215,18 @@ spring:
     username: ${username}
     password: ${password}
     driver-class-name: com.mysql.cj.jdbc.Driver
-
-分发ftl(如果在当前节点安装dinky的话就不用分发)
+    
+分发ftl到其他节点 (若在当前节点安装dinky的话就不用分发)
 scp dinky.ftl datasophon02:/opt/datasophon/datasophon-worker/conf/templates
-scp dinky.ftl datasophon03:/opt/datasophon/datasophon-worker/conf/templates
-
+ 
 重启所有work节点
 sh  /opt/datasophon/datasophon-worker/bin/datasophon-worker.sh restart worker
 ```
-
 ## 3.准备配置文件service_ddl.json
-
-进入datasophon-manager-1.2.1中
 
 ```
 cd /opt/datasophon-manager-1.2.1/conf/meta/DDP-1.2.1
-
 mkdir DINKY && cd DINKY
-
 vim service_ddl.json
 ```
 
@@ -57,11 +235,11 @@ vim service_ddl.json
   "name": "DINKY",
   "label": "Dinky",
   "description": "流处理极速开发框架,流批一体&湖仓一体的云原生平台,一站式计算平台",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "sortNum": 19,
   "dependencies":[],
-  "packageName": "dinky-release-1.16-1.0.1.tar.gz",
-  "decompressPackageName": "dinky-release-1.16-1.0.1",
+  "packageName": "dinky-release-1.16-1.1.0.tar.gz",
+  "decompressPackageName": "dinky-release-1.16-1.1.0",
   "roles": [
     {
       "name": "Dinky",
@@ -74,8 +252,7 @@ vim service_ddl.json
         "timeout": "60",
         "program": "auto.sh",
         "args": [
-          "startWithJmx",
-          "1.16"
+          "startWithJmx"
         ]
       },
       "stopRunner": {
@@ -96,8 +273,7 @@ vim service_ddl.json
         "timeout": "60",
         "program": "auto.sh",
         "args": [
-          "restart",
-          "1.16"
+          "restart"
         ]
       },
       "externalLink": {
@@ -109,11 +285,20 @@ vim service_ddl.json
   ],
   "configWriter": {
     "generators": [
+	{
+	    "filename": "application.yml",
+        "configFormat": "custom",
+        "outputDirectory": "config",
+        "templateName": "dinky-application.ftl",
+        "includeParams": [
+          "db_activate"
+        ]
+	  },
       {
         "filename": "application-mysql.yml",
         "configFormat": "custom",
         "outputDirectory": "config",
-        "templateName": "dinky.ftl",
+        "templateName": "dinky-application-mysql.ftl",
         "includeParams": [
           "databaseUrl",
           "username",
@@ -124,6 +309,18 @@ vim service_ddl.json
     ]
   },
   "parameters": [
+      {
+      "name": "db_activate",
+      "label": "Dinky激活数据库",
+      "description": "可选项为h2、mysql、pgsql,默认为mysql。若要修改其他数据库请配置相应数据库的ftl文件",
+      "configType": "map",
+      "required": true,
+      "type": "input",
+      "value": "",
+      "configurableInWizard": true,
+      "hidden": false,
+      "defaultValue": "mysql"
+    },
     {
       "name": "databaseUrl",
       "label": "Dinky数据库地址",
@@ -172,7 +369,6 @@ vim service_ddl.json
       "hidden": false,
       "defaultValue": "8888"
     }
-
   ]
 }
 ```
@@ -184,50 +380,43 @@ sh /opt/datasophon-manager-1.2.1/bin/datasophon-api.sh restart api
 ```
 
 ## 4.安装Dinky
+![PixPin_2024-08-12_21-17-28](https://github.com/user-attachments/assets/4781facf-155f-4aff-ae33-534cbe14211d)
 
-![f8532b699ebdd66fa94f2a04dc451f5b](https://github.com/javaht/datasophon/assets/54611681/327729d6-ed75-4442-b273-6460e781d8ee)
 
-
-### 4.1需要我们手动创建数据库并且运行sql
+### 4.1 手动创建数据库并且运行sql
 
 ```
-mysql -u root -p -e "create database dinky"
-
-mysql -u root -p -D dinky < /opt/datasophon/dinky/sql/dinky-mysql.sql
+mysql -u root -p -e "create database dinky" 
+mysql -u root -p -D dinky < dinky-mysql.sql
 ```
-
 ## 5.Dinky集成grafana监控
 
 ### 5.1 datasophon1.2.1默认存在，可跳过
 
 ```
 cd /opt/datasophon/prometheus
-
-vim prometheus.yml 检查是否有dinky配置文件  如果没有添加
-
+ 
+vim prometheus.yml 检查是否有dinky配置文件  如果没有则添加
   - job_name: 'dinky'
     file_sd_configs:
      - files:
        - configs/dinky.json
-
-
+       
  cd /opt/datasophon/prometheus/configs
  vim dinky.json  检查是否有dinky的配置文件  如果没有添加
-
+ 
 [
  {
   "targets":["datasophon01:10087"]
  }
-]
-然后重启Prometheus服务(以上配置文件1.2.1默认存在，不存在添加后重启prometheus)
+] 
+然后重启Prometheus服务(以上配置文件1.2.1默认存在，若不存在添加后重启prometheus)
 ```
 
 ### 5.2 Grafana 配置
 
 通过下图展示的url进去grafana配置图表，默认登陆账户密码：admin ：admin
-
-![2c74b17dc990845b18cfb7abf7f8312c](https://github.com/javaht/datasophon/assets/54611681/e151c3c1-eedb-4ce1-86b6-4427403ff3b4)
-
+![bbbb](https://github.com/user-attachments/assets/9f8478ad-3a64-4d3a-bf26-e97036e2d3c0)
 
 ### 5.3 创建Grafana 模板文件
 
@@ -956,22 +1145,15 @@ vim dinky.json
 ```
 
 ### 5.4 导入创建的模板文件
-
-![dee4fd4731a54399166c890f385697dc](https://github.com/javaht/datasophon/assets/54611681/9a18cabf-65aa-4ba5-a6e1-b22c24b3cecd)
-
-
-![12260a17477d4ade7c3c612e77f2af1c](https://github.com/javaht/datasophon/assets/54611681/3c371705-0fc9-4a73-a3d4-25903c10fcdb)
-
+![aaaddsds08-12_21-37-54](https://github.com/user-attachments/assets/1a284002-5d7a-40b2-b015-f8eaf449e1db)
+![aaaaaaaaa-38-32](https://github.com/user-attachments/assets/024d61b8-e8d5-4f0e-87f8-ce95c7ad30b3)
 
 **查看datasophon数据库中t_ddh_cluster_service_dashboard表中是否原就存在dinky 如果不存在添加**
 
 ```
 19 DINKY http://${grafanaHost}:3000/d/9qU9T1OVk/dinky?kiosk&refresh=1m
 ```
-
-![3845420da980622d83c4f9d0a3ec91bb](https://github.com/javaht/datasophon/assets/54611681/ab82db4d-7821-45ab-8ffd-b877d281fa3c)
+![3845420da980622d83c4f9d0a3ec91bb](https://github.com/user-attachments/assets/06252190-8682-445c-ae56-97a3b15cf841)
 
 回到datasophon的dinky服务，刷新即可在总览看到详细监控信息
-
-![eee3f6bd3deb64a0fa99490143c2a7c0](https://github.com/javaht/datasophon/assets/54611681/e5f4bea4-876c-4ba6-b8fb-1ca074326691)
-
+![nnnnnnn](https://github.com/user-attachments/assets/58d1d988-12d7-4697-b4ef-e0845d5d1589)
